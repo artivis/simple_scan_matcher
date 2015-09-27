@@ -2,6 +2,7 @@
 #define SIMPLE_SCAN_MATCHER_POINT2D_H
 
 #include <cmath>
+#include <vector>
 
 #include "simple_scan_matcher/similitude.h"
 
@@ -21,8 +22,8 @@ namespace simple_scan_matcher
 
     ~Point2D() { }
 
-    double getX() { return _x; }
-    double getY() { return _y; }
+    double getX() const { return _x; }
+    double getY() const { return _y; }
 
     double setX(double x) { _x = x; }
     double setY(double y) { _y = y; }
@@ -37,6 +38,9 @@ namespace simple_scan_matcher
     double _x, _y;
 
   };
+
+  typedef std::vector<simple_scan_matcher::Point2D> Scan;
+
 } //namespace simple_scan_matcher
 
 

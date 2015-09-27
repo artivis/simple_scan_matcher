@@ -10,8 +10,6 @@ using namespace simple_scan_matcher;
 
 class ScanMatcherNode
 {
-  typedef std::vector<Point2D> Scan;
-
  public:
 
   ScanMatcherNode() : _use_max_range(false), _throttle(1), _nh("")

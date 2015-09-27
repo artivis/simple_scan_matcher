@@ -10,8 +10,6 @@ namespace simple_scan_matcher
 
   class ScanMatcher
   {
-    typedef std::vector<Point2D> Scan;
-
    public:
 
     ScanMatcher() { }

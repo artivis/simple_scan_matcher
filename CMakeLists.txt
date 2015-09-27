@@ -7,12 +7,14 @@ project(simple_scan_matcher)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
+  ceres_solver
 )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(Boost REQUIRED)
 
+find_package(Eigen REQUIRED)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##

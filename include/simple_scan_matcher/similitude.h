@@ -18,6 +18,8 @@ namespace simple_scan_matcher
   public:
 
     typedef Eigen::Matrix3d SimMat;
+    typedef Eigen::Matrix2d RotMat;
+    typedef Eigen::Vector2d TraVec;
 
     typedef std::complex<double> Complex;
     typedef std::vector<Complex> ScanComplex;
@@ -43,54 +45,70 @@ namespace simple_scan_matcher
     static Similitude computeSimilitude(const Scan& source, const Scan& target,
                                         const Correspondences& correspondences);
 
-    inline SimMat getSimilarityMat() const
+    inline SimMat getSimilarityMat(bool use_scale = false) const
     {
+      double scale = use_scale ? _scale : 1.;
+
       SimMat sim_mat; //homogenous transform
-      sim_mat << std::cos(_theta), -std::sin(_theta), _scale * _x,
-                 std::sin(_theta),  std::cos(_theta), _scale * _y,
+      sim_mat << std::cos(_theta), -std::sin(_theta), scale * _x,
+                 std::sin(_theta),  std::cos(_theta), scale * _y,
                  0, 0, 1;
 
       return sim_mat;
     }
 
+    inline RotMat getRotationMat() const
+    {
+      RotMat rot_mat; //homogenous transform
+      rot_mat << std::cos(_theta), -std::sin(_theta),
+                 std::sin(_theta),  std::cos(_theta);
+
+      return rot_mat;
+    }
+
+    inline TraVec getTranslationVec() const
+    {
+      TraVec tra_vec; //homogenous transform
+      tra_vec << _scale * _x, _scale * _y;
+
+      return tra_vec;
+    }
+
     Similitude& operator=(const Similitude& lhs)
     {
-      _x = lhs.getX();
-      _y = lhs.getY();
+      _x     = lhs.getX();
+      _y     = lhs.getY();
       _theta = lhs.getTheta();
       _scale = lhs.getScale();
 
       return *this;
     }
 
-//    Similitude& operator=(const SimMat& lhs)
-//    {
-//      _x = lhs(0,2);
-//      _y = lhs(1,2);
-//      _theta = std::atan2(lhs(1,0), lhs(0,0));
-//      _scale = 1.;
+    Similitude& operator*=(const Similitude& lhs)
+    {
+      SimMat mult = lhs.getSimilarityMat() * this->getSimilarityMat();
+      _x = mult(0,2);
+      _y = mult(1,2);
+      _theta = std::atan2(mult(1,0), mult(0,0));
+      _scale = _scale * lhs.getScale();
 
-//      return *this;
-//    }
+      return *this;
+    }
 
-//    Similitude& operator*(const Similitude& lhs)
-//    {
-////      _a = lhs._a;
-////      _b = lhs._b;
-//      _x = lhs.getX();
-//      _y = lhs.getY();
-//      _theta = lhs.getTheta();
-//      _scale = lhs.getScale();
+    friend Similitude operator*(const Similitude& rhs, const Similitude& lhs)
+    {
+      SimMat sm = rhs.getSimilarityMat() * lhs.getSimilarityMat();
+      return Similitude( (double)sm(0,2), (double)sm(1,2),
+                          std::atan2(sm(1,0), sm(0,0)),
+                          rhs.getScale() * lhs.getScale() );
+    }
 
-//      return *this;
-//    }
-
-//    friend Similitude operator*(const Similitude& rhs, const Similitude& lhs)
-//    {
-//      SimMat sm = rhs.getSimilarityMat() * lhs.getSimilarityMat();
-//      Similitude s(lhs(0,2), lhs(1,2), std::atan2(lhs(1,0), lhs(0,0)));
-//      return s;
-//    }
+    friend Similitude operator+(const Similitude& rhs, const Similitude& lhs)
+    {
+      return Similitude( rhs.getX()+lhs.getX(), rhs.getY()+lhs.getY(),
+                         rhs.getTheta()+lhs.getTheta(),
+                         rhs.getScale() * lhs.getScale() );
+    }
 
     inline double getX() const { return _x; }
     inline void setX(double x) { _x = x; }

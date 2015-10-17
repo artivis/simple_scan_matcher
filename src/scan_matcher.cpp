@@ -30,6 +30,8 @@ namespace simple_scan_matcher
     }
 
     /*
+    std::cout << "source size : " << source.size() << std::endl;
+    std::cout << "target size : " << target.size() << std::endl;
     std::cout << "Computed " << correspondences.size() << " correspondences." << std::endl;
     for (int i=0; i<correspondences.size(); ++i)
       std::cout << " " << correspondences[i].first << "-" << correspondences[i].second;

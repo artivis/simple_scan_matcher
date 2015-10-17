@@ -21,6 +21,7 @@ namespace simple_scan_matcher
 
     ceres::Problem problem;
 
+    // TODO : init
     double a[2] = {0, 0};
     double b[2] = {0, 0};
 
@@ -36,8 +37,10 @@ namespace simple_scan_matcher
 
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_SCHUR;
-    options.minimizer_progress_to_stdout = true;
+    options.minimizer_progress_to_stdout = false;
     options.gradient_tolerance = 1e-15;
+
+    options.logging_type = ceres::SILENT;
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);

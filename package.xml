@@ -26,7 +26,7 @@
   <!-- Authors do not have to be maintianers, but could be -->
   <!-- Example: -->
   <!-- <author email="jane.doe@example.com">Jane Doe</author> -->
-  <author >Jeremie Deray</author>
+  <author email="Deray@todo.todo">Jeremie Deray</author>
 
 
   <!-- The *_depend tags are used to specify dependencies -->
@@ -41,12 +41,18 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>BOOST</build_depend>
   <build_depend>roscpp</build_depend>
+  <build_depend>tf</build_depend>
   <build_depend>sensor_msgs</build_depend>
-  <run_depend>BOOST</run_depend>
+  <build_depend>message_generation</build_depend>
+
   <run_depend>roscpp</run_depend>
+  <run_depend>tf</run_depend>
   <run_depend>sensor_msgs</run_depend>
+  <run_depend>dynamic_reconfigure</run_depend>
+  <run_depend>message_runtime</run_depend>
+
+  <build_depend>cmake_modules</build_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

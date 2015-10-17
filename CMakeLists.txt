@@ -5,36 +5,27 @@ project(simple_scan_matcher)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  cmake_modules
   roscpp
+  tf
   sensor_msgs
   ceres_solver
+  dynamic_reconfigure
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(Boost REQUIRED)
-
 find_package(Eigen REQUIRED)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
 ################################################
 
-## To declare and build dynamic reconfigure parameters within this
-## package, follow these steps:
-## * In the file package.xml:
-##   * add a build_depend and a run_depend tag for "dynamic_reconfigure"
-## * In this file (CMakeLists.txt):
-##   * add "dynamic_reconfigure" to
-##     find_package(catkin REQUIRED COMPONENTS ...)
-##   * uncomment the "generate_dynamic_reconfigure_options" section below
-##     and list every .cfg file to be processed
-
-## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
-#   cfg/DynReconf1.cfg
-#   cfg/DynReconf2.cfg
-# )
+generate_dynamic_reconfigure_options(
+    cfg/scan_matcher.cfg
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -60,6 +51,7 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${BOOST_INCLUDE_DIRS}
+  ${Eigen_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -75,7 +67,16 @@ add_library(${PROJECT_NAME}
 
 ## Declare a C++ executable
 add_executable(scan_matcher_node src/scan_matcher_node.cpp)
+add_dependencies(scan_matcher_node ${PROJECT_NAME}_gencfg simple_scan_matcher_generate_messages_cpp)
 target_link_libraries(scan_matcher_node
+   ${PROJECT_NAME}
+   ${catkin_LIBRARIES}
+   ${BOOST_LIBRARIES}
+)
+
+## Declare a C++ executable
+add_executable(test_sim_est sample/test_similitude.cpp)
+target_link_libraries(test_sim_est
    ${PROJECT_NAME}
    ${catkin_LIBRARIES}
    ${BOOST_LIBRARIES}

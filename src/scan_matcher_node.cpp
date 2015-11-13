@@ -3,6 +3,7 @@
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Pose2D.h>
 #include <geometry_msgs/PointStamped.h>
+#include <visualization_msgs/Marker.h>
 #include <tf/transform_listener.h>
 //#include <tf/transform_broadcaster.h>
 
@@ -21,6 +22,8 @@ namespace
 {
   typedef simple_scan_matcher::SimpleScanMatcherReconfigureConfig Conf;
   typedef dynamic_reconfigure::Server<Conf>                       ReconfServer;
+
+  #define ROS_RED_STREAM(x)   ROS_INFO_STREAM("\033[1;31m" << x << "\033[0m")
 }
 
 class ScanMatcherNode
@@ -28,7 +31,7 @@ class ScanMatcherNode
  public:
 
   ScanMatcherNode() : _use_max_range(false), _new_scan(false), _pose_stamped(false),
-    _throttle(1), _kf_min_dist(0.25), _kf_min_ang(0.17),
+    _throttle(1), _kf_min_dist(0.15), _kf_min_ang(0.10), //0.05  0.15
     _base_frame("base_link"), _laser_frame("base_laser_link"), _pose_frame("world"), _nh("~")
   {
     ros::NodeHandle nh;
@@ -53,9 +56,17 @@ class ScanMatcherNode
     if (_pub_pose_stamped)
       _pub_pose_stamped = _nh.advertise<geometry_msgs::PoseStamped>("pose", 1);
 
-    _kf_min_dist *= _kf_min_dist;
+    _pub_scan = _nh.advertise<visualization_msgs::Marker>("kf_scan", 1);
+
+    _kf_min_dist/* *= _kf_min_dist*/;
 
     _getBaseToLaserTf();
+
+    ROS_INFO_STREAM("Initial sim : \n\t x: " << _sim_cumu.getX() <<
+                    " y: " << _sim_cumu.getY() << " theta: " << _sim_cumu.getTheta()
+                    << " scale: " << _sim_cumu.getScale());
+
+    ROS_INFO_STREAM("Initial pose : \n" << _sim_cumu.getTransformationMat());
   }
 
   ~ScanMatcherNode() { }
@@ -65,9 +76,9 @@ class ScanMatcherNode
     if (scan_ptr == NULL)                      return;
     if (scan_ptr->header.seq % _throttle != 0) return;
 
-    float max_range       = scan_ptr->range_max;
-    float angle_min       = scan_ptr->angle_min;
-    float angle_increment = scan_ptr->angle_increment;
+    double max_range       = (double)scan_ptr->range_max;
+    double angle_min       = (double)scan_ptr->angle_min;
+    double angle_increment = (double)scan_ptr->angle_increment;
 
     _scan.clear();
 
@@ -76,18 +87,17 @@ class ScanMatcherNode
       _theta_map.clear();
 
       for (int i=0; i<scan_ptr->ranges.size(); ++i)
-        _theta_map.push_back( angle_min + float(i) * angle_increment );
+        _theta_map.push_back( angle_min + double(i) * angle_increment );
     }
 
     for (int i=0; i<scan_ptr->ranges.size(); ++i)
     {
-      float range = scan_ptr->ranges[i];
-      float theta = _theta_map[i];
+      double range = (double)scan_ptr->ranges[i];
 
       if (!_use_max_range && range >= max_range)  continue;
       if (std::isnan(range) || std::isinf(range)) continue;
 
-      Point2D p = Point2D::makePoint2DFromPolarCoordinates(range, theta);
+      Point2D p = Point2D::makePoint2DFromPolarCoordinates(range, _theta_map[i]);
 
       _scan.push_back(p);
     }
@@ -103,12 +113,30 @@ class ScanMatcherNode
     // Init kf scan
     if (_kf_scan.empty())
     {
-      ROS_DEBUG("Init. KF scan;");
-      _kf_scan = _scan;
+      ROS_DEBUG("Init. KF scan.");
+      _kf_scan  = _scan;
+      _new_scan = false;
       return;
     }
 
-    _sim_rel = _matcher.computeTransform(_kf_scan, _scan);
+    _eval_scan = _scan;
+
+    // Compute tranform that maps kf_scan onto scan.
+    _sim_rel = _matcher.computeTransform(_kf_scan, _eval_scan, _correspondences).inv();
+
+    if(std::abs(1. - _sim_rel.getScale()) > 0.1)
+    {
+      ROS_RED_STREAM("Something's Fishy, ignoring last estimate.");
+      ROS_RED_STREAM("Estimated sim : \n\t x: " << _sim_rel.getX() <<
+                     " y: " << _sim_rel.getY() << " theta: " << _sim_rel.getTheta()
+                     << " scale: " << _sim_rel.getScale());
+
+      //_new_scan = false;
+
+      //return;
+    }
+
+    publish();
 
     if (_hasMovedEnough(_sim_rel))
     {
@@ -116,21 +144,27 @@ class ScanMatcherNode
       _updateKFScan();
     }
 
-    ROS_DEBUG_STREAM("Estimated sim : \n\t x: " << _sim_rel.getX() <<
-                    " y: " << _sim_rel.getY() << " theta: " << _sim_rel.getTheta());
+    ROS_INFO_STREAM("Estimated sim : \n\t x: " << _sim_rel.getX() <<
+                    " y: " << _sim_rel.getY() << " theta: " << _sim_rel.getTheta()
+                    << " scale: " << _sim_rel.getScale());
 
     _new_scan = false;
   }
 
   void publish()
   {
+    tf::Transform rel_lf = _simToTf(_sim_rel);
+
+    rel_lf = _base_to_laser * rel_lf * _laser_to_base;
+    //////////////////////
+
     Similitude sim_pub = _sim_cumu * _sim_rel;
 
     // get pose (relative to last kf) in laser frame
-    tf::Transform pose_lf = _XYThetaToTf(sim_pub.getX(), sim_pub.getY(), sim_pub.getTheta());
+    tf::Transform pose_lf = _simToTf(sim_pub);
 
     // get pose (relative to last kf) in base frame
-    tf::Transform pose_bf = /*_laser_to_base **/ pose_lf;
+    tf::Transform pose_bf = _laser_to_base * pose_lf;
 
     geometry_msgs::Pose2D pose2D;
 
@@ -155,6 +189,118 @@ class ScanMatcherNode
 
       _pub_pose_stamped.publish(poseStamped);
     }
+
+    // What's the point if nobody cares
+    if (_pub_scan.getNumSubscribers() > 0)
+    {
+      // Publish KF scan (green)
+      visualization_msgs::Marker marker_kf, marker_scan, marker_kf_tr, corres;
+      marker_kf.header.frame_id = "base_laser_link";
+      marker_kf.header.stamp = ros::Time::now();
+      marker_kf.id = 0;
+      marker_kf.ns = "kf_scan";
+      marker_kf.type = visualization_msgs::Marker::SPHERE_LIST;
+      marker_kf.action = visualization_msgs::Marker::ADD;
+      marker_kf.pose.position.x = 0.0;
+      marker_kf.pose.position.y = 0.0;
+      marker_kf.pose.position.z = 0.0;
+      marker_kf.scale.x = 0.05;
+      marker_kf.scale.y = 0.05;
+      marker_kf.scale.z = 0.05;
+      marker_kf.color.r = 0;
+      marker_kf.color.g = 1.0;
+      marker_kf.color.b = 0;
+      marker_kf.color.a = 1.0;
+      marker_kf.lifetime = ros::Duration(0);
+
+      marker_scan.header   = marker_kf_tr.header   = corres.header   = marker_kf.header;
+      marker_scan.id       = marker_kf_tr.id       = corres.id       = marker_kf.id;
+      marker_scan.action   = marker_kf_tr.action   = corres.action   = marker_kf.action;
+      marker_scan.pose     = marker_kf_tr.pose     = corres.pose     = marker_kf.pose;
+      marker_scan.scale    = marker_kf_tr.scale    = corres.scale    = marker_kf.scale;
+      marker_scan.lifetime = marker_kf_tr.lifetime = corres.lifetime = marker_kf.lifetime;
+
+      for (size_t i=0; i<_kf_scan.size(); ++i)
+      {
+        geometry_msgs::Point point;
+
+        point.x = _kf_scan[i].getX();
+        point.y = _kf_scan[i].getY();
+        marker_kf.points.push_back(point);
+      }
+
+      _pub_scan.publish(marker_kf);
+
+      marker_scan, marker_kf_tr, corres;
+
+      // Publish current scan (red)
+      marker_scan.ns = "scan";
+      marker_scan.type = visualization_msgs::Marker::SPHERE_LIST;
+      marker_scan.color.r = 1.0;
+      marker_scan.color.g = 0;
+      marker_scan.color.b = 0;
+      marker_scan.color.a = 1.0;
+
+      for (size_t i=0; i<_eval_scan.size(); ++i)
+      {
+        geometry_msgs::Point point;
+
+        point.x = _eval_scan[i].getX();
+        point.y = _eval_scan[i].getY();
+        point.z = 1.;
+        marker_scan.points.push_back(point);
+      }
+
+      _pub_scan.publish(marker_scan);
+
+      // Publish current scan corrected (blue)
+      Scan scan_tr = _matcher.transformScan(_eval_scan, _sim_rel);
+
+      marker_kf_tr.ns = "kf_scan_tr";
+      marker_kf_tr.type = visualization_msgs::Marker::SPHERE_LIST;
+      marker_kf_tr.color.r = 0;
+      marker_kf_tr.color.g = 0;
+      marker_kf_tr.color.b = 1.0;
+      marker_kf_tr.color.a = 1.0;
+
+      for (size_t i=0; i<scan_tr.size(); ++i)
+      {
+        geometry_msgs::Point point;
+
+        point.x = scan_tr[i].getX();
+        point.y = scan_tr[i].getY();
+        point.z = 2.;
+        marker_kf_tr.points.push_back(point);
+      }
+
+      _pub_scan.publish(marker_kf_tr);
+
+      corres.ns = "correspondences";
+      corres.type = visualization_msgs::Marker::LINE_LIST;
+      corres.scale.x = 0.01; corres.scale.y = 0.01; corres.scale.z = 0.01;
+      corres.color.r = 1.;
+      corres.color.g = 0.5;
+      corres.color.b = 0;
+      corres.color.a = 1.0;
+
+      for (size_t i=0; i<_correspondences.size(); ++i)
+      {
+        geometry_msgs::Point point_scan, point_kf_scan;
+
+        point_kf_scan.x = _kf_scan[_correspondences[i].first].getX();
+        point_kf_scan.y = _kf_scan[_correspondences[i].first].getY();
+        point_kf_scan.z = 0.;
+
+        point_scan.x    = _eval_scan[_correspondences[i].second].getX();
+        point_scan.y    = _eval_scan[_correspondences[i].second].getY();
+        point_scan.z    = 1.;
+
+        corres.points.push_back(point_kf_scan);
+        corres.points.push_back(point_scan);
+      }
+
+      _pub_scan.publish(corres);
+    }
   }
 
 private:
@@ -167,18 +313,21 @@ private:
 
   std::string _base_frame, _laser_frame, _pose_frame;
 
-  std::vector<float> _theta_map;
+  std::vector<double> _theta_map;
 
   ros::Time _stamp;
-  Scan _kf_scan, _scan;
+  Scan _kf_scan, _scan, _eval_scan;
 
   Similitude _sim_rel, _sim_cumu;
+  Correspondences _correspondences;
 
   ros::NodeHandle _nh;
 
   ros::Subscriber _sub_scan;
   ros::Publisher  _pub_pose;
   ros::Publisher  _pub_pose_stamped;
+
+  ros::Publisher  _pub_scan;
 
   tf::TransformListener    _listener;
 //  tf::TransformBroadcaster _broadcaster;
@@ -192,17 +341,17 @@ private:
 
   void drcb(Conf &config, uint32_t level)
   {
-    _use_max_range = config.use_max_range;
-    _kf_min_dist   = config.min_dist;
-    _kf_min_ang    = config.min_ang;
-    _throttle      = config.throttle;
+//    _use_max_range = config.use_max_range;
+//    _kf_min_dist   = config.min_dist;
+//    _kf_min_ang    = config.min_ang;
+//    _throttle      = config.throttle;
 
     ROS_INFO_STREAM("Reconf");
   }
 
   bool _hasMovedEnough(const Similitude& sim)
   {
-    if ((sim.getX()*sim.getX() + sim.getY()*sim.getY()) > _kf_min_dist) return true;
+    if (std::sqrt(sim.getX()*sim.getX() + sim.getY()*sim.getY()) > _kf_min_dist) return true;
 
     if (std::fabs(sim.getTheta()) > _kf_min_ang) return true;
 
@@ -212,7 +361,20 @@ private:
   void _updateKFScan()
   {
     _kf_scan = _scan;
-    _sim_cumu *= _sim_rel;
+
+//    std::cout << std::endl;
+//    ROS_RED_STREAM("Prev sim_cumu : \n\t x: " << _sim_cumu.getX() <<
+//                   " y: " << _sim_cumu.getY() << " theta: " << _sim_cumu.getTheta()
+//                   << " scale: " << _sim_cumu.getScale());
+
+    tf::Transform rel_lf = _simToTf(_sim_rel);
+    rel_lf = _base_to_laser * rel_lf * _laser_to_base;
+
+    _sim_cumu *= _tfToSim(rel_lf);
+
+//    ROS_RED_STREAM("New sim_cumu : \n\t x: " << _sim_cumu.getX() <<
+//                   " y: " << _sim_cumu.getY() << " theta: " << _sim_cumu.getTheta() << "\n"
+//                   << " scale: " << _sim_cumu.getScale());
   }
 
   bool _getBaseToLaserTf()
@@ -252,6 +414,24 @@ private:
     return t;
   }
 
+  tf::Transform _simToTf(const Similitude& sim)
+  {
+    tf::Transform t;
+    t.setOrigin(tf::Vector3(sim.getX(), sim.getY(), 0.0));
+    tf::Quaternion q;
+    q.setRPY(0.0, 0.0, sim.getTheta());
+    t.setRotation(q);
+
+    return t;
+  }
+
+  Similitude _tfToSim(const tf::Transform& tfin)
+  {
+    return Similitude(tfin.getOrigin().getX(),
+                      tfin.getOrigin().getY(),
+                      tf::getYaw(tfin.getRotation()), 1.);
+  }
+
   geometry_msgs::Pose _Pose2DToPose(const geometry_msgs::Pose2D pose2D)
   {
     geometry_msgs::Pose pose;
@@ -283,13 +463,19 @@ int main(int argc, char **argv)
 
   ScanMatcherNode scan_matcher;
 
-  ros::Rate rate(50);
+  ros::Rate rate(25);
 
   while (ros::ok())
   {
+    ros::Time start = ros::Time::now();
+
     scan_matcher.process();
 
-    scan_matcher.publish();
+//    ROS_INFO_STREAM("Took : " << (ros::Time::now() - start).toSec() << " to process.\n");
+
+    start = ros::Time::now();
+
+//    ROS_INFO_STREAM("Took : " << (ros::Time::now() - start).toSec() << " to publish.\n");
 
     ros::spinOnce();
 

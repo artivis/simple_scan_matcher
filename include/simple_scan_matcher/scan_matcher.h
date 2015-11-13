@@ -16,9 +16,16 @@ namespace simple_scan_matcher
 
     ~ScanMatcher() { }
 
-    virtual void computeCorrespondences(const Scan &source, const Scan &target, Correspondences& correspondences);
+    void computeCorrespondences(const Scan &source, const Scan &target, Correspondences& correspondences);
+
+    Correspondences filterCorrespondences(const Scan &source, const Scan &target,
+                                          const Correspondences& correspondences,
+                                          const Similitude::ComplexVec& sim);
 
     Scan transformScan(const Scan& source, const Similitude& sim);
+
+    Similitude computeTransform(const Scan& source, const Scan& target,
+                                Correspondences& correspondences);
 
     Similitude computeTransform(const Scan& source, const Scan& target);
 

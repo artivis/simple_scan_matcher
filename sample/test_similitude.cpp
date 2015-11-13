@@ -44,7 +44,7 @@ int main(int argc, char **argv)
   for (size_t i=1; i<=20; ++i)
     scan_orig.push_back( Point2D(i, 2.*i ) );
 
-  Similitude gt(0.1, 0.3333, 0.02, 1.043);
+  Similitude gt(0.5, 0.3333, 0.11, 1.043);
 
   ScanMatcher scan_matcher;
 
@@ -61,7 +61,7 @@ int main(int argc, char **argv)
       {
         double R1 = (double) rand() / (double) RAND_MAX;
         double R2 = (double) rand() / (double) RAND_MAX;
-        double X = (double) sqrt( -2. * log( R1 )) * cos( 2. * M_PI * R2 );
+        double X  = (double) sqrt( -2. * log( R1 )) * cos( 2. * M_PI * R2 );
 
         noise(r) = X / 100.;
       }
@@ -72,8 +72,6 @@ int main(int argc, char **argv)
     }
   }
 
-
-
   Similitude est = scan_matcher.computeTransform(scan_orig, scan_trans);
 
   std::cout << "Source scan :\n" << scan_orig  << std::endl;
@@ -82,11 +80,11 @@ int main(int argc, char **argv)
   std::cout << "\nGround truth Similarity :\n\t" << gt  << std::endl;
   std::cout << "Estimated Similarity      :\n\t" << est << std::endl;
 
-  std::cout << "\nGround truth T :\n" << gt.getSimilarityMat()  << std::endl;
-  std::cout << "Estimated T      :\n" << est.getSimilarityMat() << std::endl;
+  std::cout << "\nGround truth T :\n" << gt.getTransformationMat()  << std::endl;
+  std::cout << "Estimated T      :\n" << est.getTransformationMat() << std::endl;
 
-  std::cout << "\nRotation    error : " << errorRotation(gt.getSimilarityMat(),    est.getSimilarityMat()) << std::endl;
-  std::cout << "Translation error : "   << errorTranslation(gt.getSimilarityMat(), est.getSimilarityMat()) << std::endl;
+  std::cout << "\nRotation    error : " << errorRotation(gt.getTransformationMat(),    est.getTransformationMat()) << std::endl;
+  std::cout << "Translation error : "   << errorTranslation(gt.getTransformationMat(), est.getTransformationMat()) << std::endl;
 
   return 0;
 }

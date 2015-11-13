@@ -2,7 +2,7 @@
 #define SIMPLE_SCAN_MATCHER_POINT2D_H
 
 #include <cmath>
-#include <vector>
+#include<Eigen/StdVector>
 
 #include "simple_scan_matcher/similitude.h"
 
@@ -12,29 +12,34 @@ namespace simple_scan_matcher
   {
   public:
 
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
     typedef Eigen::Vector3d                    PointMat;
     typedef Eigen::aligned_allocator<PointMat> PointMatAlloc;
     typedef Eigen::Matrix3d                    SimMat;
 
    public:
 
-    Point2D() { _point.setZero(); }
+    Point2D()
+    {
+      _point(0) = 0.;
+      _point(1) = 0.;
+      _point(2) = 1.;
+    }
 
     Point2D(double x, double y)
     {
       _point(0) = x;
       _point(1) = y;
-      _point(2) = 1;
-    }
-
-    Point2D(PointMat& point)
-    {
-      _point = point;
+      _point(2) = 1.;
     }
 
     Point2D(const PointMat& point)
     {
       _point = point;
+      _point(0) /= point(2);
+      _point(1) /= point(2);
+      _point(2) /= point(2);
     }
 
     ~Point2D() { }
@@ -55,17 +60,21 @@ namespace simple_scan_matcher
       return Point2D(m * _point);
     }
 
+    Point2D& operator=(const Eigen::Vector3d& v)
+    {
+      _point = v;
+      return *this;
+    }
+
     Point2D& operator+=(const Eigen::Vector3d& v)
     {
       _point += v;
-
       return *this;
     }
 
   private:
 
     PointMat _point;
-
   };
 
   typedef std::vector<Point2D, Point2D::PointMatAlloc> Scan;

@@ -9,7 +9,6 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   tf
   sensor_msgs
-  ceres_solver
   dynamic_reconfigure
   message_generation
 )

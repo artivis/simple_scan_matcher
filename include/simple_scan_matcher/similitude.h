@@ -5,8 +5,6 @@
 
 #include <eigen3/Eigen/Core>
 
-#include <ceres/ceres.h>
-
 #include "simple_scan_matcher/point2d.h"
 
 namespace simple_scan_matcher
@@ -145,37 +143,6 @@ namespace simple_scan_matcher
   };
 
   const Similitude::Complex C_ONE = Similitude::Complex(1,0);
-
-  namespace SimSolver
-  {
-    struct ComplexCostFunctor
-    {
-      ComplexCostFunctor(Similitude::Complex z, Similitude::Complex zp)
-        : _z(z), _zp(zp) { }
-
-      template <typename T>
-       bool operator()(const T* const a, const T* const b, T* residual) const
-       {
-         const std::complex<T> a_c(a[0], a[1]);
-         const std::complex<T> b_c(b[0], b[1]);
-
-         const std::complex<T> z(_z);
-         const std::complex<T> zp(_zp);
-
-         const std::complex<T> t = zp - (a_c*z+b_c);
-
-         residual[0] = T(t.real());
-         residual[1] = T(t.imag());
-
-         return true;
-       }
-
-    private:
-
-       Similitude::Complex _z, _zp;
-    };
-
-  } //namespace SimSolver
 
 } //namespace simple_scan_matcher
 

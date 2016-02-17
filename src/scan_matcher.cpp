@@ -1,5 +1,8 @@
 #include "simple_scan_matcher/scan_matcher.h"
 
+#include <numeric>
+#include <set>
+
 namespace simple_scan_matcher
 {
 

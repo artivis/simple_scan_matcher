@@ -44,16 +44,17 @@ class ScanMatcherNode
 
     _dynreconf_srv->setCallback(cb);
 
-    _nh.param("throttle",    _throttle,    _throttle);
-    _nh.param("min_dist",    _kf_min_dist, _kf_min_dist);
-    _nh.param("min_ang",     _kf_min_ang,  _kf_min_ang);
-    _nh.param("base_frame",  _base_frame,  _base_frame);
-    _nh.param("laser_frame", _laser_frame, _laser_frame);
-    _nh.param("pose_frame",  _pose_frame,  _pose_frame);
+    _nh.param("throttle",     _throttle,     _throttle);
+    _nh.param("min_dist",     _kf_min_dist,  _kf_min_dist);
+    _nh.param("min_ang",      _kf_min_ang,   _kf_min_ang);
+    _nh.param("base_frame",   _base_frame,   _base_frame);
+    _nh.param("laser_frame",  _laser_frame,  _laser_frame);
+    _nh.param("pose_frame",   _pose_frame,   _pose_frame);
+    _nh.param("pose_stamped", _pose_stamped, _pose_stamped);
 
     _pub_pose = _nh.advertise<geometry_msgs::Pose2D>("pose2D", 1);
 
-    if (_pub_pose_stamped)
+    if (_pose_stamped)
       _pub_pose_stamped = _nh.advertise<geometry_msgs::PoseStamped>("pose", 1);
 
     _pub_scan = _nh.advertise<visualization_msgs::Marker>("kf_scan", 1);

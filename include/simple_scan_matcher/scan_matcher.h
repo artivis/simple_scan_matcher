@@ -12,24 +12,34 @@ namespace simple_scan_matcher
   {
    public:
 
-    ScanMatcher() { }
+    ScanMatcher() : _match_min_dist(0.2), _weight_lsq(false) { }
 
     ~ScanMatcher() { }
 
-    void computeCorrespondences(const Scan &source, const Scan &target, Correspondences& correspondences);
+    void computeCorrespondences(const Scan &source, const Scan &target,
+                                Correspondences& correspondences,
+                                std::vector<double>& distances);
 
     Correspondences filterCorrespondences(const Scan &source, const Scan &target,
                                           const Correspondences& correspondences,
-                                          const Similitude::ComplexVec& sim);
+                                          const Similitude::ComplexVector2& simvec);
 
     Scan transformScan(const Scan& source, const Similitude& sim);
 
     Similitude computeTransform(const Scan& source, const Scan& target,
                                 Correspondences& correspondences);
 
+    Similitude computeTransform(const Scan& source, const Scan& target,
+                                Correspondences& correspondences,
+                                std::vector<double>& distances);
+
     Similitude computeTransform(const Scan& source, const Scan& target);
 
-  private:
+  protected:
+
+    bool _weight_lsq;
+
+    double _match_min_dist;
 
   };
 

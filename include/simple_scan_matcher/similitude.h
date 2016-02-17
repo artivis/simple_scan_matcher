@@ -19,7 +19,6 @@ namespace simple_scan_matcher
     typedef Eigen::Vector2d TraVec;
 
     typedef std::complex<double> Complex;
-    typedef std::vector<Complex> ComplexVec;
     typedef std::vector<Complex> ScanComplex;
 
     typedef Eigen::Vector2cd ComplexVector2;
@@ -46,16 +45,32 @@ namespace simple_scan_matcher
 
     ~Similitude() { }
 
-    static void computeSimilitude(Complex a, Complex b, Complex ap, Complex bp,
-                                  ComplexVec& vec);
+
+    static void   computeSimilitude(Complex a, Complex b, Complex ap, Complex bp,
+                                    ComplexVector2& simvec);
 
     static double computeSimilitude(const Scan& source, const Scan& target,
                                     const Correspondences& correspondences,
-                                    ComplexVec& vec);
+                                    ComplexVector2& simvec);
+
+    static double computeSimilitude(const Scan& source, const Scan& target,
+                                    const Correspondences& correspondences,
+                                    const ComplexDiagonalMatrix& weights,
+                                    ComplexVector2& simvec);
+
+
+    static void   computeSimilitude(Complex a, Complex b, Complex ap, Complex bp,
+                                    Similitude& sim);
 
     static double computeSimilitude(const Scan& source, const Scan& target,
                                     const Correspondences& correspondences,
                                     Similitude& sim);
+
+    static double computeSimilitude(const Scan& source, const Scan& target,
+                                    const Correspondences& correspondences,
+                                    const ComplexDiagonalMatrix& weights,
+                                    Similitude& sim);
+
 
     inline Similitude inv() const
     {

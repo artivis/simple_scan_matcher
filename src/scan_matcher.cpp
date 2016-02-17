@@ -10,7 +10,8 @@ typedef std::pair<uint, uint>   IndexPair;
 typedef std::vector<IndexPair>  IndexPairs;
 
   void ScanMatcher::computeCorrespondences(const Scan &source, const Scan &target,
-                                           Correspondences& correspondences)
+                                           Correspondences& correspondences,
+                                           std::vector<double>& distances)
   {
     correspondences.clear();
 
@@ -18,15 +19,16 @@ typedef std::vector<IndexPair>  IndexPairs;
 
     bool match = false;
 
+    std::vector<bool> source_is_matched(source.size(), false);
+    std::vector<bool> target_is_matched(target.size(), false);
+
     for (size_t i=0; i<source.size(); ++i)
     {
-      double prev_dist = 0.2;
+      double prev_dist = 1e17;
 
       Correspondence correspondence;
 
       match = false;
-
-      std::vector<bool> is_matched(target.size(), false);
 
       for (size_t j=last_index; j<target.size(); ++j)
       {
@@ -35,18 +37,23 @@ typedef std::vector<IndexPair>  IndexPairs;
 
         double dist = (xdiff*xdiff) + (ydiff*ydiff);
 
-        if (dist < prev_dist && !is_matched[j])
+        if (dist < prev_dist && dist < _match_min_dist
+            && !source_is_matched[i] && !target_is_matched[j])
         {
           prev_dist  = dist;
           correspondence = std::make_pair(i, j);
 
-          is_matched[j] = true;
+          source_is_matched[i] = true;
+          target_is_matched[j] = true;
           match = true;
         }
       }
 
       if (match)
+      {
         correspondences.push_back(correspondence);
+        distances.push_back(prev_dist);
+      }
     }
 
     //std::cout << "source size : " << source.size() << std::endl;
@@ -59,7 +66,7 @@ typedef std::vector<IndexPair>  IndexPairs;
 
   Correspondences ScanMatcher::filterCorrespondences(const Scan &source, const Scan &target,
                                                      const Correspondences& correspondences,
-                                                     const Similitude::ComplexVec& sim)
+                                                     const Similitude::ComplexVector2& simvec)
   {
     // Similarity (geometry) computed from
     // 2 pairs of corresponding points
@@ -87,11 +94,11 @@ typedef std::vector<IndexPair>  IndexPairs;
       Similitude::Complex az(target[ corr_tmp[0].second ].getX(), target[ corr_tmp[0].second ].getY());
       Similitude::Complex bz(target[ corr_tmp[1].second ].getX(), target[ corr_tmp[1].second ].getY());
 
-      Similitude::ComplexVec ab_tmp;
+      Similitude::ComplexVector2 ab_tmp;
       Similitude::computeSimilitude(a, b, az, bz, ab_tmp);
 
-      distances[i] = ( (sim[0].real()-ab_tmp[0].real())*(sim[1].real()-ab_tmp[1].real()) -
-                                (sim[0].imag()-ab_tmp[0].imag())*(sim[1].imag()-ab_tmp[1].imag()) );
+      distances[i] = ( (simvec(0).real()-ab_tmp(0).real())*(simvec(1).real()-ab_tmp(1).real()) -
+                                (simvec(0).imag()-ab_tmp(0).imag())*(simvec(1).imag()-ab_tmp(1).imag()) );
     }
 
     double sum  = std::accumulate(distances.begin(), distances.end(), 0.0);
@@ -100,8 +107,8 @@ typedef std::vector<IndexPair>  IndexPairs;
     double sq_sum = std::inner_product(distances.begin(), distances.end(), distances.begin(), 0.0);
     double stdev  = std::sqrt(sq_sum / pairs_count - mean * mean);
 
-//    std::cout << "distances: sum  : " << sum << " pairs_count: " << pairs_count << std::endl;
-//    std::cout << "distances: mean : " << mean << " std_dev   : " << stdev << std::endl;
+    //std::cout << "distances: sum  : " << sum << " pairs_count: " << pairs_count << std::endl;
+    //std::cout << "distances: mean : " << mean << " std_dev   : " << stdev << std::endl;
 
     // keep at least 75% of the population
     double stdev2 = stdev + stdev;
@@ -129,12 +136,13 @@ typedef std::vector<IndexPair>  IndexPairs;
 
   Scan ScanMatcher::transformScan(const Scan& source, const Similitude& sim)
   {
-    Scan out(source.size());
+    Scan out;
+    out.reserve(source.size());
 
     Similitude::SimMat sim_mat = sim.getTransformationMat();
 
     for (int i=0; i<source.size(); ++i)
-      out[i] = source[i].transform(sim_mat);
+      out.push_back(source[i].transform(sim_mat));
 
     return out;
   }
@@ -142,24 +150,41 @@ typedef std::vector<IndexPair>  IndexPairs;
   Similitude ScanMatcher::computeTransform(const Scan& source, const Scan& target,
                                            Correspondences& correspondences)
   {
+    std::vector<double> distances;
+    return computeTransform(source, target, correspondences, distances);
+  }
+
+  Similitude ScanMatcher::computeTransform(const Scan& source, const Scan& target,
+                                           Correspondences& correspondences,
+                                           std::vector<double>& distances)
+  {
     correspondences.clear();
+    distances.clear();
 
     if (source.empty() || target.empty()) return Similitude();
 
-    Scan source_tmp = source;
+    Scan source_tmp(source);
 
     Similitude sim;
 
     for (size_t i=0; i<100; ++i)
     {
-      computeCorrespondences(source_tmp, target, correspondences);
+      computeCorrespondences(source_tmp, target, correspondences, distances);
 
-      Similitude::ComplexVec ab_tmp;
-      Similitude::computeSimilitude(source_tmp, target, correspondences, ab_tmp);
+      Similitude::ComplexDiagonalMatrix weights;
+      weights.resize(distances.size());
 
-      Similitude sim_tmp(ab_tmp[0], ab_tmp[1]);
+      for (int d=0; d<distances.size(); ++d)
+        weights.diagonal()(d) = Similitude::Complex(distances[d], 0);
 
-//      if(std::abs(1. - sim_tmp.getScale()) < 0.1)
+      Similitude sim_tmp;
+
+      if (!_weight_lsq)
+        Similitude::computeSimilitude(source_tmp, target, correspondences, sim_tmp);
+      else
+        Similitude::computeSimilitude(source_tmp, target, correspondences, weights, sim_tmp);
+
+      //if(std::abs(1. - sim_tmp.getScale()) < 0.1)
         sim *= sim_tmp;
 
       if (std::fabs(sim_tmp.getTheta()) < 1e-7 ||
@@ -178,8 +203,9 @@ typedef std::vector<IndexPair>  IndexPairs;
   Similitude ScanMatcher::computeTransform(const Scan& source, const Scan& target)
   {
     Correspondences correspondences;
+    std::vector<double> distances;
 
-    return computeTransform(source, target, correspondences);
+    return computeTransform(source, target, correspondences, distances);
   }
 
 } //namespace simple_scan_matcher

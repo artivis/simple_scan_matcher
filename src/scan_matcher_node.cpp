@@ -63,11 +63,13 @@ class ScanMatcherNode
 
     _getBaseToLaserTf();
 
-    ROS_INFO_STREAM("Initial sim : \n\t x: " << _sim_cumu.getX() <<
+    _getInitialPoseTf(_sim_cumu);
+
+    ROS_INFO_STREAM("Initial Sim : \n\t x: " << _sim_cumu.getX() <<
                     " y: " << _sim_cumu.getY() << " theta: " << _sim_cumu.getTheta()
                     << " scale: " << _sim_cumu.getScale());
 
-    ROS_INFO_STREAM("Initial pose : \n" << _sim_cumu.getTransformationMat());
+    ROS_DEBUG_STREAM("Initial T : \n" << _sim_cumu.getTransformationMat());
   }
 
   ~ScanMatcherNode() { }
@@ -127,11 +129,7 @@ class ScanMatcherNode
 
     if(std::abs(1. - _sim_rel.getScale()) > 0.1)
     {
-      ROS_RED_STREAM("Something's Fishy, ignoring last estimate.");
-      ROS_RED_STREAM("Estimated sim : \n\t x: " << _sim_rel.getX() <<
-                     " y: " << _sim_rel.getY() << " theta: " << _sim_rel.getTheta()
-                     << " scale: " << _sim_rel.getScale());
-
+      ROS_RED_STREAM("Something's Fishy.");
       //_new_scan = false;
 
       //return;
@@ -145,9 +143,9 @@ class ScanMatcherNode
       _updateKFScan();
     }
 
-    ROS_INFO_STREAM("Estimated sim : \n\t x: " << _sim_rel.getX() <<
-                    " y: " << _sim_rel.getY() << " theta: " << _sim_rel.getTheta()
-                    << " scale: " << _sim_rel.getScale());
+    ROS_DEBUG_STREAM("Estimated sim : \n\t x: " << _sim_rel.getX() <<
+                     " y: " << _sim_rel.getY() << " theta: " << _sim_rel.getTheta()
+                     << " scale: " << _sim_rel.getScale());
 
     _new_scan = false;
   }
@@ -157,7 +155,6 @@ class ScanMatcherNode
     tf::Transform rel_lf = _simToTf(_sim_rel);
 
     rel_lf = _base_to_laser * rel_lf * _laser_to_base;
-    //////////////////////
 
     Similitude sim_pub = _sim_cumu * _sim_rel;
 
@@ -342,12 +339,15 @@ private:
 
   void drcb(Conf &config, uint32_t level)
   {
-//    _use_max_range = config.use_max_range;
-//    _kf_min_dist   = config.min_dist;
-//    _kf_min_ang    = config.min_ang;
-//    _throttle      = config.throttle;
+    _use_max_range = config.use_max_range;
+    _kf_min_dist   = config.min_dist;
+    _kf_min_ang    = config.min_ang;
+    _throttle      = config.throttle;
 
-    ROS_INFO_STREAM("Reconf");
+    ROS_DEBUG_STREAM("Param '_use_max_range' set to : " << _use_max_range);
+    ROS_DEBUG_STREAM("Param '_kf_min_dist' set to   : " << _kf_min_dist);
+    ROS_DEBUG_STREAM("Param '_kf_min_ang' set to    : " << _kf_min_ang);
+    ROS_DEBUG_STREAM("Param '_throttle' set to      : " << _throttle);
   }
 
   bool _hasMovedEnough(const Similitude& sim)
@@ -363,19 +363,11 @@ private:
   {
     _kf_scan = _scan;
 
-//    std::cout << std::endl;
-//    ROS_RED_STREAM("Prev sim_cumu : \n\t x: " << _sim_cumu.getX() <<
-//                   " y: " << _sim_cumu.getY() << " theta: " << _sim_cumu.getTheta()
-//                   << " scale: " << _sim_cumu.getScale());
-
     tf::Transform rel_lf = _simToTf(_sim_rel);
+
     rel_lf = _base_to_laser * rel_lf * _laser_to_base;
 
     _sim_cumu *= _tfToSim(rel_lf);
-
-//    ROS_RED_STREAM("New sim_cumu : \n\t x: " << _sim_cumu.getX() <<
-//                   " y: " << _sim_cumu.getY() << " theta: " << _sim_cumu.getTheta() << "\n"
-//                   << " scale: " << _sim_cumu.getScale());
   }
 
   bool _getBaseToLaserTf()
@@ -400,6 +392,38 @@ private:
 
     _base_to_laser = base_to_laser;
     _laser_to_base = base_to_laser.inverse();
+
+    return got_tf;
+  }
+
+  bool _getInitialPoseTf(Similitude& sim)
+  {
+    tf::StampedTransform map_to_base;
+    map_to_base.setIdentity();
+
+    bool got_tf = false;
+    try
+    {
+      _listener.waitForTransform(
+            _pose_frame, _base_frame, ros::Time(0), ros::Duration(2.0));
+      _listener.lookupTransform (
+            _pose_frame, _base_frame, ros::Time(0), map_to_base);
+
+      got_tf = true;
+    }
+    catch (tf::TransformException ex)
+    {
+      ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
+    }
+
+    ROS_DEBUG_STREAM("Init tf : \n\t x: " << map_to_base.getOrigin().getX() <<
+                     " y: " << map_to_base.getOrigin().getY()
+                     << " theta: " << tf::getYaw( map_to_base.getRotation() ));
+
+    sim.setX(map_to_base.getOrigin().getX());
+    sim.setY(map_to_base.getOrigin().getY());
+
+    sim.setTheta(tf::getYaw( map_to_base.getRotation() ));
 
     return got_tf;
   }
@@ -472,11 +496,7 @@ int main(int argc, char **argv)
 
     scan_matcher.process();
 
-//    ROS_INFO_STREAM("Took : " << (ros::Time::now() - start).toSec() << " to process.\n");
-
-    start = ros::Time::now();
-
-//    ROS_INFO_STREAM("Took : " << (ros::Time::now() - start).toSec() << " to publish.\n");
+    ROS_DEBUG_STREAM("Took : " << (ros::Time::now() - start).toSec() << " to process.\n");
 
     ros::spinOnce();
 

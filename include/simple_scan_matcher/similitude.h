@@ -24,6 +24,12 @@ namespace simple_scan_matcher
     typedef std::vector<Complex> ComplexVec;
     typedef std::vector<Complex> ScanComplex;
 
+    typedef Eigen::Vector2cd ComplexVector2;
+    typedef Eigen::VectorXcd ComplexVector;
+    typedef Eigen::MatrixXcd ComplexMatrix;
+
+    typedef Eigen::DiagonalMatrix<Complex, Eigen::Dynamic> ComplexDiagonalMatrix;
+
     Similitude() : _x(0), _y(0), _theta(0), _scale(1) { }
 
     Similitude(Complex a, Complex b) :

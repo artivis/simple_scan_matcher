@@ -74,16 +74,6 @@ namespace simple_scan_matcher
       return tran_mat;
     }
 
-    inline SimMat getSimilarityMat() const
-    {
-      SimMat sim_mat;
-      sim_mat << std::cos(_theta), -std::sin(_theta), _scale * _x,
-                 std::sin(_theta),  std::cos(_theta), _scale * _y,
-                 0, 0, 1;
-
-      return sim_mat;
-    }
-
     inline RotMat getRotationMat() const
     {
       RotMat rot_mat;
